@@ -477,16 +477,28 @@ export default function CheckoutPage() {
   const offerId = searchParams.get('offer_id');
 
   useEffect(() => {
-    if (!planId) {
-      navigate('/dashboard/settings');
-      return;
-    }
+    const resolvePlan = async () => {
+      let resolvedPlanId = planId;
 
-    const fetchPlan = async () => {
+      if (!resolvedPlanId && offerId) {
+        const { data: offer } = await supabase
+          .from('promotional_offers')
+          .select('plano_alvo_id')
+          .eq('id', offerId)
+          .maybeSingle();
+
+        resolvedPlanId = offer?.plano_alvo_id || null;
+      }
+
+      if (!resolvedPlanId) {
+        navigate('/dashboard/settings');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('subscription_plans')
         .select('id, name, price, duration')
-        .eq('id', planId)
+        .eq('id', resolvedPlanId)
         .maybeSingle();
 
       if (error || !data) {
@@ -504,8 +516,8 @@ export default function CheckoutPage() {
       setPlanLoading(false);
     };
 
-    fetchPlan();
-  }, [planId, cycle, navigate]);
+    resolvePlan();
+  }, [planId, offerId, cycle, navigate]);
 
   useEffect(() => {
     if (!offerId || !user?.id || !plan) {
