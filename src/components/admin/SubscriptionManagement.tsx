@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -138,6 +138,20 @@ export default function SubscriptionManagement({
     payment_date: format(new Date(), 'yyyy-MM-dd'),
     notes: '',
   });
+
+  useEffect(() => {
+    if (subscription) {
+      setEditForm({
+        plan_name: subscription.plan_name || '',
+        plan_price: subscription.plan_price || 0,
+        billing_cycle: (subscription.billing_cycle as BillingCycle) || 'monthly',
+        status: subscription.status || 'pending',
+        payment_status: subscription.payment_status || 'pending',
+        next_payment_date: subscription.next_payment_date || '',
+      });
+      setPaymentForm(prev => ({ ...prev, amount: subscription.plan_price || 0 }));
+    }
+  }, [subscription]);
 
   const calculateEndDate = (billingCycle: string): string => {
     const now = new Date();

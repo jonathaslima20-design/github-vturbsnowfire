@@ -221,18 +221,22 @@ export default function UsersManagementPage() {
       const userIds = usersData.map(u => u.id);
       const { data: subscriptionsData } = await supabase
         .from('subscriptions')
-        .select('user_id, billing_cycle, status, next_payment_date, end_date')
-        .in('user_id', userIds);
+        .select('user_id, billing_cycle, status, next_payment_date')
+        .in('user_id', userIds)
+        .order('created_at', { ascending: false });
 
-      const subscriptionsByUser = new Map(
-        subscriptionsData?.map(sub => [sub.user_id, sub]) || []
-      );
+      const subscriptionsByUser = new Map<string, typeof subscriptionsData extends (infer T)[] | null ? T : never>();
+      for (const sub of subscriptionsData || []) {
+        if (!subscriptionsByUser.has(sub.user_id)) {
+          subscriptionsByUser.set(sub.user_id, sub);
+        }
+      }
 
       let enrichedUsers = usersData.map(user => ({
         ...user,
         billing_cycle: subscriptionsByUser.get(user.id)?.billing_cycle,
         next_payment_date: subscriptionsByUser.get(user.id)?.next_payment_date,
-        subscription_end_date: subscriptionsByUser.get(user.id)?.end_date,
+        subscription_end_date: subscriptionsByUser.get(user.id)?.next_payment_date,
       }));
 
       if (planTypeFilter !== 'all') {
