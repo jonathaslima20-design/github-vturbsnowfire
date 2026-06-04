@@ -136,7 +136,7 @@ async function activatePlan(
       .from("subscriptions")
       .update({
         plan_name: plan?.name || "Plano Pago",
-        monthly_price: plan?.price || 0,
+        plan_price: plan?.price || 0,
         billing_cycle: billingCycleDb,
         status: "active",
         payment_status: "paid",
@@ -149,7 +149,7 @@ async function activatePlan(
     await admin.from("subscriptions").insert({
       user_id: userId,
       plan_name: plan?.name || "Plano Pago",
-      monthly_price: plan?.price || 0,
+      plan_price: plan?.price || 0,
       billing_cycle: billingCycleDb,
       status: "active",
       payment_status: "paid",
@@ -162,8 +162,6 @@ async function activatePlan(
     .from("users")
     .update({
       plan_status: "active",
-      subscription_end_date: expiresAt.toISOString().split("T")[0],
-      next_payment_date: expiresAt.toISOString().split("T")[0],
       billing_cycle: billingCycleDb,
     })
     .eq("id", userId);

@@ -99,11 +99,11 @@ export function useAdminDashboardStats() {
         supabase.from('users').select('id', { count: 'exact', head: true }).eq('plan_status', 'suspended').eq('role', 'corretor'),
         supabase.from('users').select('id', { count: 'exact', head: true }).eq('plan_status', 'free').eq('role', 'corretor'),
         supabase.from('users').select('id', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo.toISOString()),
-        supabase.from('subscriptions').select('monthly_price').eq('status', 'active'),
+        supabase.from('subscriptions').select('plan_price').eq('status', 'active'),
         supabase.from('users').select('id, name, email, plan_status, created_at, avatar_url').order('created_at', { ascending: false }).limit(10),
         supabase.from('subscriptions').select('user_id, next_payment_date, billing_cycle, users!inner(name, email)').eq('status', 'active').gte('next_payment_date', now.toISOString()).lte('next_payment_date', sevenDaysFromNow.toISOString()).order('next_payment_date', { ascending: true }).limit(5),
         supabase.from('users').select('created_at').gte('created_at', threeMonthsAgo.toISOString()).order('created_at', { ascending: true }),
-        supabase.from('subscriptions').select('monthly_price, created_at').eq('status', 'active').gte('created_at', sixMonthsAgo.toISOString()),
+        supabase.from('subscriptions').select('plan_price, created_at').eq('status', 'active').gte('created_at', sixMonthsAgo.toISOString()),
       ]);
 
       const recentCount = recentUsersRes.count || 0;
@@ -115,7 +115,7 @@ export function useAdminDashboardStats() {
         growthPercentage = 100;
       }
 
-      const totalRevenue = revenueRes.data?.reduce((sum, sub) => sum + (sub.monthly_price || 0), 0) || 0;
+      const totalRevenue = revenueRes.data?.reduce((sum, sub) => sum + (sub.plan_price || 0), 0) || 0;
 
       const expiringSubscriptions: ExpiringSubscription[] = (expiringSubsRes.data || []).map((sub: any) => ({
         user_id: sub.user_id,
@@ -189,7 +189,7 @@ function buildWeeklySignups(data: { created_at: string }[], startDate: Date): We
   return Array.from(weeks.entries()).map(([week, count]) => ({ week, count }));
 }
 
-function buildMonthlyRevenue(data: { monthly_price: number; created_at: string }[]): MonthlyRevenue[] {
+function buildMonthlyRevenue(data: { plan_price: number; created_at: string }[]): MonthlyRevenue[] {
   const months: Map<string, number> = new Map();
   const now = new Date();
 
@@ -203,7 +203,7 @@ function buildMonthlyRevenue(data: { monthly_price: number; created_at: string }
     const d = new Date(row.created_at);
     const label = d.toLocaleDateString('pt-BR', { month: 'short' });
     if (months.has(label)) {
-      months.set(label, (months.get(label) || 0) + (row.monthly_price || 0));
+      months.set(label, (months.get(label) || 0) + (row.plan_price || 0));
     }
   }
 

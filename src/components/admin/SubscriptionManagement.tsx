@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -27,9 +28,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { format, addMonths, addDays } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CircleCheck as CheckCircle, Circle as XCircle, CreditCard as Edit, Plus, Calendar } from 'lucide-react';
+import { CircleCheck as CheckCircle, Circle as XCircle, CreditCard as Edit, Plus, Calendar, DollarSign } from 'lucide-react';
 import type { Subscription, SubscriptionStatus, PaymentStatus, BillingCycle } from '@/types';
 
 interface SubscriptionManagementProps {
@@ -40,6 +41,66 @@ interface SubscriptionManagementProps {
   onSubscriptionUpdate: () => void;
 }
 
+const getPriceLabel = (cycle: string) => {
+  switch (cycle) {
+    case 'monthly': return 'Valor Mensal';
+    case 'quarterly': return 'Valor Trimestral';
+    case 'semiannually': return 'Valor Semestral';
+    case 'annually': return 'Valor Anual';
+    default: return 'Valor do Plano';
+  }
+};
+
+const getBillingCycleLabel = (cycle: string) => {
+  switch (cycle) {
+    case 'monthly': return 'Mensal';
+    case 'quarterly': return 'Trimestral';
+    case 'semiannually': return 'Semestral';
+    case 'annually': return 'Anual';
+    default: return cycle;
+  }
+};
+
+const calculateNextPaymentDate = (startDate: string, cycle: BillingCycle): string => {
+  const date = new Date(startDate);
+  switch (cycle) {
+    case 'monthly': return format(addMonths(date, 1), 'yyyy-MM-dd');
+    case 'quarterly': return format(addMonths(date, 3), 'yyyy-MM-dd');
+    case 'semiannually': return format(addMonths(date, 6), 'yyyy-MM-dd');
+    case 'annually': return format(addMonths(date, 12), 'yyyy-MM-dd');
+    default: return format(addMonths(date, 1), 'yyyy-MM-dd');
+  }
+};
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'active': return 'bg-green-500';
+    case 'pending': return 'bg-yellow-500';
+    case 'cancelled': return 'bg-red-500';
+    case 'suspended': return 'bg-orange-500';
+    default: return 'bg-gray-500';
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'active': return 'Ativo';
+    case 'pending': return 'Pendente';
+    case 'cancelled': return 'Cancelado';
+    case 'suspended': return 'Suspenso';
+    default: return status;
+  }
+};
+
+const getPaymentStatusLabel = (status: string) => {
+  switch (status) {
+    case 'paid': return 'Pago';
+    case 'pending': return 'Pendente';
+    case 'overdue': return 'Vencido';
+    default: return status;
+  }
+};
+
 export default function SubscriptionManagement({
   subscription,
   userId,
@@ -49,11 +110,12 @@ export default function SubscriptionManagement({
 }: SubscriptionManagementProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const [editForm, setEditForm] = useState({
     plan_name: subscription?.plan_name || '',
-    monthly_price: subscription?.monthly_price || 0,
+    plan_price: subscription?.plan_price || 0,
     billing_cycle: (subscription?.billing_cycle as BillingCycle) || 'monthly',
     status: subscription?.status || 'pending',
     payment_status: subscription?.payment_status || 'pending',
@@ -61,13 +123,20 @@ export default function SubscriptionManagement({
   });
 
   const [createForm, setCreateForm] = useState({
-    plan_name: 'Plano Básico',
-    monthly_price: 29.90,
+    plan_name: 'Plano Basico',
+    plan_price: 29.90,
     billing_cycle: 'monthly' as BillingCycle,
     status: 'active' as SubscriptionStatus,
     payment_status: 'paid' as PaymentStatus,
     start_date: format(new Date(), 'yyyy-MM-dd'),
     next_payment_date: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+  });
+
+  const [paymentForm, setPaymentForm] = useState({
+    amount: subscription?.plan_price || 0,
+    payment_method: 'pix' as string,
+    payment_date: format(new Date(), 'yyyy-MM-dd'),
+    notes: '',
   });
 
   const calculateEndDate = (billingCycle: string): string => {
@@ -92,7 +161,10 @@ export default function SubscriptionManagement({
         ? calculateEndDate(subscription.billing_cycle)
         : undefined;
 
-      const subscriptionUpdate: Record<string, unknown> = { status: newStatus, payment_status: newStatus === 'active' ? 'paid' : subscription.payment_status };
+      const subscriptionUpdate: Record<string, unknown> = {
+        status: newStatus,
+        payment_status: newStatus === 'active' ? 'paid' : subscription.payment_status,
+      };
       if (newEndDate) {
         subscriptionUpdate.next_payment_date = newEndDate;
       }
@@ -104,19 +176,15 @@ export default function SubscriptionManagement({
 
       if (error) throw error;
 
-      if (newStatus === 'active' && newEndDate) {
-        await supabase
-          .from('users')
-          .update({
-            plan_status: 'active',
-            subscription_end_date: newEndDate,
-            next_payment_date: newEndDate,
-            billing_cycle: subscription.billing_cycle,
-          })
-          .eq('id', userId);
-      } else {
-        await updateUserPlanStatus(userId, newStatus);
-      }
+      const userUpdate: Record<string, unknown> = {
+        plan_status: newStatus === 'active' ? 'active' : 'suspended',
+        billing_cycle: subscription.billing_cycle,
+      };
+
+      await supabase
+        .from('users')
+        .update(userUpdate)
+        .eq('id', userId);
 
       toast.success(
         newStatus === 'active'
@@ -166,7 +234,7 @@ export default function SubscriptionManagement({
         .from('subscriptions')
         .update({
           plan_name: editForm.plan_name,
-          monthly_price: editForm.monthly_price,
+          plan_price: editForm.plan_price,
           billing_cycle: editForm.billing_cycle as BillingCycle,
           status: editForm.status,
           payment_status: editForm.payment_status,
@@ -178,15 +246,9 @@ export default function SubscriptionManagement({
 
       await updateUserPlanStatus(userId, editForm.status as SubscriptionStatus);
 
-      const userUpdate: Record<string, unknown> = {
-        billing_cycle: editForm.billing_cycle,
-        next_payment_date: editForm.next_payment_date,
-        subscription_end_date: editForm.next_payment_date,
-      };
-
       await supabase
         .from('users')
-        .update(userUpdate)
+        .update({ billing_cycle: editForm.billing_cycle })
         .eq('id', userId);
 
       toast.success('Assinatura atualizada com sucesso');
@@ -202,7 +264,7 @@ export default function SubscriptionManagement({
 
   const handleCreateSubscription = async () => {
     if (!userId) {
-      toast.error('ID do usuário não encontrado');
+      toast.error('ID do usuario nao encontrado');
       return;
     }
 
@@ -213,7 +275,7 @@ export default function SubscriptionManagement({
         .insert({
           user_id: userId,
           plan_name: createForm.plan_name,
-          monthly_price: createForm.monthly_price,
+          plan_price: createForm.plan_price,
           billing_cycle: createForm.billing_cycle as BillingCycle,
           status: createForm.status,
           payment_status: createForm.payment_status,
@@ -227,11 +289,7 @@ export default function SubscriptionManagement({
 
       await supabase
         .from('users')
-        .update({
-          billing_cycle: createForm.billing_cycle,
-          next_payment_date: createForm.next_payment_date,
-          subscription_end_date: createForm.next_payment_date,
-        })
+        .update({ billing_cycle: createForm.billing_cycle })
         .eq('id', userId);
 
       toast.success('Assinatura criada com sucesso');
@@ -240,6 +298,70 @@ export default function SubscriptionManagement({
     } catch (error) {
       console.error('Error creating subscription:', error);
       toast.error('Erro ao criar assinatura');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRegisterPayment = async () => {
+    if (!subscription || !userId) return;
+
+    if (paymentForm.amount <= 0) {
+      toast.error('Valor deve ser maior que 0');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          subscription_id: subscription.id,
+          amount: paymentForm.amount,
+          payment_method: paymentForm.payment_method,
+          payment_date: paymentForm.payment_date,
+          status: 'completed',
+          notes: paymentForm.notes || null,
+        });
+
+      if (paymentError) throw paymentError;
+
+      const newNextPaymentDate = calculateNextPaymentDate(
+        paymentForm.payment_date,
+        subscription.billing_cycle as BillingCycle
+      );
+
+      const { error: subError } = await supabase
+        .from('subscriptions')
+        .update({
+          payment_status: 'paid',
+          status: 'active',
+          next_payment_date: newNextPaymentDate,
+        })
+        .eq('id', subscription.id);
+
+      if (subError) throw subError;
+
+      await supabase
+        .from('users')
+        .update({
+          plan_status: 'active',
+          billing_cycle: subscription.billing_cycle,
+        })
+        .eq('id', userId);
+
+      toast.success('Pagamento registrado com sucesso');
+      setIsPaymentDialogOpen(false);
+      setPaymentForm({
+        amount: subscription.plan_price || 0,
+        payment_method: 'pix',
+        payment_date: format(new Date(), 'yyyy-MM-dd'),
+        notes: '',
+      });
+      onSubscriptionUpdate();
+    } catch (error) {
+      console.error('Error registering payment:', error);
+      toast.error('Erro ao registrar pagamento');
     } finally {
       setIsUpdating(false);
     }
@@ -292,87 +414,13 @@ export default function SubscriptionManagement({
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-500';
-      case 'pending':
-        return 'bg-yellow-500';
-      case 'cancelled':
-        return 'bg-red-500';
-      case 'suspended':
-        return 'bg-orange-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'Ativo';
-      case 'pending':
-        return 'Pendente';
-      case 'cancelled':
-        return 'Cancelado';
-      case 'suspended':
-        return 'Suspenso';
-      default:
-        return status;
-    }
-  };
-
-  const getPaymentStatusLabel = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'Pago';
-      case 'pending':
-        return 'Pendente';
-      case 'overdue':
-        return 'Vencido';
-      default:
-        return status;
-    }
-  };
-
-  const getBillingCycleLabel = (cycle: string) => {
-    switch (cycle) {
-      case 'monthly':
-        return 'Mensal';
-      case 'quarterly':
-        return 'Trimestral';
-      case 'semiannually':
-        return 'Semestral';
-      case 'annually':
-        return 'Anual';
-      default:
-        return cycle;
-    }
-  };
-
-  const calculateNextPaymentDate = (startDate: string, cycle: BillingCycle): string => {
-    const date = new Date(startDate);
-    switch (cycle) {
-      case 'monthly':
-        return format(addMonths(date, 1), 'yyyy-MM-dd');
-      case 'quarterly':
-        return format(addMonths(date, 3), 'yyyy-MM-dd');
-      case 'semiannually':
-        return format(addMonths(date, 6), 'yyyy-MM-dd');
-      case 'annually':
-        return format(addMonths(date, 12), 'yyyy-MM-dd');
-      default:
-        return format(addMonths(date, 1), 'yyyy-MM-dd');
-    }
-  };
-
   if (!subscription) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Assinatura</CardTitle>
           <CardDescription>
-            Este usuário não possui assinatura ativa
+            Este usuario nao possui assinatura ativa
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -418,13 +466,13 @@ export default function SubscriptionManagement({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="create-monthly-price">Valor Mensal</Label>
+                  <Label htmlFor="create-plan-price">{getPriceLabel(createForm.billing_cycle)}</Label>
                   <Input
-                    id="create-monthly-price"
+                    id="create-plan-price"
                     type="number"
                     step="0.01"
-                    value={createForm.monthly_price}
-                    onChange={(e) => setCreateForm({ ...createForm, monthly_price: parseFloat(e.target.value) })}
+                    value={createForm.plan_price}
+                    onChange={(e) => setCreateForm({ ...createForm, plan_price: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
 
@@ -463,7 +511,7 @@ export default function SubscriptionManagement({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="create-next-payment">Próximo Pagamento</Label>
+                  <Label htmlFor="create-next-payment">Proximo Pagamento</Label>
                   <Input
                     id="create-next-payment"
                     type="date"
@@ -495,122 +543,210 @@ export default function SubscriptionManagement({
           <div>
             <CardTitle>Gerenciar Assinatura</CardTitle>
             <CardDescription>
-              Controle a assinatura do usuário
+              Controle a assinatura do usuario
             </CardDescription>
           </div>
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Edit className="h-4 w-4 mr-2" />
-                Editar
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Editar Assinatura</DialogTitle>
-                <DialogDescription>
-                  Atualize as informações da assinatura de {userName}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-billing-cycle">Periodicidade do Plano</Label>
-                  <Select
-                    value={editForm.billing_cycle}
-                    onValueChange={(value) => {
-                      const planNameMap: Record<string, string> = {
-                        monthly: 'Plano Mensal',
-                        quarterly: 'Plano Trimestral',
-                        semiannually: 'Plano Semestral',
-                        annually: 'Plano Anual',
-                      };
-                      setEditForm({
-                        ...editForm,
-                        billing_cycle: value,
-                        plan_name: planNameMap[value] || editForm.plan_name,
-                      });
-                    }}
-                  >
-                    <SelectTrigger id="edit-billing-cycle">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">Mensal</SelectItem>
-                      <SelectItem value="quarterly">Trimestral (3 meses)</SelectItem>
-                      <SelectItem value="semiannually">Semestral (6 meses)</SelectItem>
-                      <SelectItem value="annually">Anual (12 meses)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-monthly-price">Valor Mensal</Label>
-                  <Input
-                    id="edit-monthly-price"
-                    type="number"
-                    step="0.01"
-                    value={editForm.monthly_price}
-                    onChange={(e) => setEditForm({ ...editForm, monthly_price: parseFloat(e.target.value) })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-status">Status</Label>
-                  <Select
-                    value={editForm.status}
-                    onValueChange={(value) => setEditForm({ ...editForm, status: value })}
-                  >
-                    <SelectTrigger id="edit-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="suspended">Suspenso</SelectItem>
-                      <SelectItem value="cancelled">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-payment-status">Status de Pagamento</Label>
-                  <Select
-                    value={editForm.payment_status}
-                    onValueChange={(value) => setEditForm({ ...editForm, payment_status: value })}
-                  >
-                    <SelectTrigger id="edit-payment-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paid">Pago</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="overdue">Vencido</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-next-payment">Próximo Pagamento</Label>
-                  <Input
-                    id="edit-next-payment"
-                    type="date"
-                    value={editForm.next_payment_date}
-                    onChange={(e) => setEditForm({ ...editForm, next_payment_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                  Cancelar
+          <div className="flex gap-2">
+            <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Registrar Pagamento
                 </Button>
-                <Button onClick={handleUpdateSubscription} disabled={isUpdating}>
-                  {isUpdating ? 'Salvando...' : 'Salvar Alterações'}
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Registrar Pagamento</DialogTitle>
+                  <DialogDescription>
+                    Registre um pagamento manual para {userName}. A data do proximo pagamento sera recalculada automaticamente.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-amount">Valor (R$)</Label>
+                    <Input
+                      id="payment-amount"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={paymentForm.amount}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-method">Metodo de Pagamento</Label>
+                    <Select
+                      value={paymentForm.payment_method}
+                      onValueChange={(value) => setPaymentForm({ ...paymentForm, payment_method: value })}
+                    >
+                      <SelectTrigger id="payment-method">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pix">PIX</SelectItem>
+                        <SelectItem value="credit_card">Cartao de Credito</SelectItem>
+                        <SelectItem value="debit_card">Cartao de Debito</SelectItem>
+                        <SelectItem value="transfer">Transferencia</SelectItem>
+                        <SelectItem value="cash">Dinheiro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-date">Data do Pagamento</Label>
+                    <Input
+                      id="payment-date"
+                      type="date"
+                      value={paymentForm.payment_date}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-notes">Observacoes (opcional)</Label>
+                    <Textarea
+                      id="payment-notes"
+                      value={paymentForm.notes}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                      placeholder="Ex: Pagamento via transferencia bancaria"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                    <p className="text-muted-foreground">
+                      Proximo pagamento sera calculado como: <strong>{format(new Date(paymentForm.payment_date || new Date()), 'dd/MM/yyyy', { locale: ptBR })}</strong> + {getBillingCycleLabel(subscription.billing_cycle).toLowerCase()} = <strong>{format(new Date(calculateNextPaymentDate(paymentForm.payment_date || format(new Date(), 'yyyy-MM-dd'), subscription.billing_cycle as BillingCycle)), 'dd/MM/yyyy', { locale: ptBR })}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleRegisterPayment} disabled={isUpdating}>
+                    {isUpdating ? 'Registrando...' : 'Registrar Pagamento'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Editar Assinatura</DialogTitle>
+                  <DialogDescription>
+                    Atualize as informacoes da assinatura de {userName}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-billing-cycle">Periodicidade do Plano</Label>
+                    <Select
+                      value={editForm.billing_cycle}
+                      onValueChange={(value) => {
+                        const planNameMap: Record<string, string> = {
+                          monthly: 'Plano Mensal',
+                          quarterly: 'Plano Trimestral',
+                          semiannually: 'Plano Semestral',
+                          annually: 'Plano Anual',
+                        };
+                        setEditForm({
+                          ...editForm,
+                          billing_cycle: value,
+                          plan_name: planNameMap[value] || editForm.plan_name,
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="edit-billing-cycle">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                        <SelectItem value="quarterly">Trimestral (3 meses)</SelectItem>
+                        <SelectItem value="semiannually">Semestral (6 meses)</SelectItem>
+                        <SelectItem value="annually">Anual (12 meses)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-plan-price">{getPriceLabel(editForm.billing_cycle)}</Label>
+                    <Input
+                      id="edit-plan-price"
+                      type="number"
+                      step="0.01"
+                      value={editForm.plan_price}
+                      onChange={(e) => setEditForm({ ...editForm, plan_price: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-status">Status</Label>
+                    <Select
+                      value={editForm.status}
+                      onValueChange={(value) => setEditForm({ ...editForm, status: value })}
+                    >
+                      <SelectTrigger id="edit-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Ativo</SelectItem>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="suspended">Suspenso</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-payment-status">Status de Pagamento</Label>
+                    <Select
+                      value={editForm.payment_status}
+                      onValueChange={(value) => setEditForm({ ...editForm, payment_status: value })}
+                    >
+                      <SelectTrigger id="edit-payment-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="paid">Pago</SelectItem>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="overdue">Vencido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-next-payment">Proximo Pagamento</Label>
+                    <Input
+                      id="edit-next-payment"
+                      type="date"
+                      value={editForm.next_payment_date}
+                      onChange={(e) => setEditForm({ ...editForm, next_payment_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleUpdateSubscription} disabled={isUpdating}>
+                    {isUpdating ? 'Salvando...' : 'Salvar Alteracoes'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -623,12 +759,12 @@ export default function SubscriptionManagement({
               </Badge>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Valor Mensal</div>
+              <div className="text-sm text-muted-foreground mb-1">{getPriceLabel(subscription.billing_cycle)}</div>
               <div className="font-semibold">
                 {new Intl.NumberFormat('pt-BR', {
                   style: 'currency',
                   currency: currency,
-                }).format(subscription.monthly_price)}
+                }).format(subscription.plan_price)}
               </div>
             </div>
             <div>
@@ -650,7 +786,7 @@ export default function SubscriptionManagement({
               </Badge>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Próximo Pagamento</div>
+              <div className="text-sm text-muted-foreground mb-1">Proximo Pagamento</div>
               <div className="font-semibold flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 {format(new Date(subscription.next_payment_date), 'dd/MM/yyyy', { locale: ptBR })}
@@ -702,7 +838,7 @@ export default function SubscriptionManagement({
                   <AlertDialogTitle>Cancelar assinatura</AlertDialogTitle>
                   <AlertDialogDescription>
                     Tem certeza que deseja cancelar a assinatura de "{userName}"?
-                    Esta ação não pode ser desfeita.
+                    Esta acao nao pode ser desfeita.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

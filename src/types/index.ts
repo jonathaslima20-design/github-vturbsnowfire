@@ -228,7 +228,7 @@ export interface Subscription {
   id: string;
   user_id: string;
   plan_name: string;
-  monthly_price: number;
+  plan_price: number;
   billing_cycle: BillingCycle;
   status: SubscriptionStatus;
   payment_status: PaymentStatus;
