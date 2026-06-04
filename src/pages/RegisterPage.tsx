@@ -7,7 +7,6 @@ import * as z from 'zod';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Loader, CircleAlert as AlertCircle, MessageCircle } from 'lucide-react';
-import { useSubscriptionModal } from '@/contexts/SubscriptionModalContext';
 import { trackLead } from '@/lib/metaEvents';
 
 import { Button } from '@/components/ui/button';
@@ -77,8 +76,6 @@ export default function RegisterPage() {
   }, []);
   const { signUp } = useAuth();
   const navigate = useNavigate();
-  const { openModal } = useSubscriptionModal();
-
   // Capturar código de indicação da URL ou localStorage
   const referralCode = searchParams.get('ref') || localStorage.getItem('vitrineturbo_ref_code');
 
@@ -134,7 +131,6 @@ export default function RegisterPage() {
       localStorage.removeItem('vitrineturbo_ref_code');
       trackLead(data.email);
       toast.success('Cadastro realizado com sucesso!');
-      openModal(false);
       navigate('/dashboard');
     } catch (error: any) {
       console.error('Register error:', error);
