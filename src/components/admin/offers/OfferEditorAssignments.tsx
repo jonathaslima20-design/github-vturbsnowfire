@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-  Search, UserPlus, X, Trash2, Mail, Store, Eye,
-  MousePointerClick, CircleCheck as CheckCircle, Circle as XCircle,
-  Clock, ArrowUp, ArrowDown, ArrowUpDown, Bot, User as UserIcon,
-  Filter, ChevronDown, Radio, Zap, Activity,
-} from 'lucide-react';
+import { Search, UserPlus, X, Trash2, Mail, Store, Eye, MousePointerClick, CircleCheck as CheckCircle, Circle as XCircle, Clock, ArrowUp, ArrowDown, ArrowUpDown, Bot, User as UserIcon, Filter, ChevronDown, Radio, Zap, Activity, TriangleAlert as AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -154,9 +149,23 @@ export function OfferEditorAssignments({ offerId, adminUserId }: Props) {
   const [pendingAction, setPendingAction] = useState<'assign' | 'send' | null>(null);
   const [sendProgress, setSendProgress] = useState<number | null>(null);
 
+  // Offer status
+  const [offerActive, setOfferActive] = useState<boolean | null>(null);
+
   // Live feed
   const [liveFeed, setLiveFeed] = useState<LiveFeedEvent[]>([]);
   const liveFeedRef = useRef<LiveFeedEvent[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from('promotional_offers')
+      .select('is_active')
+      .eq('id', offerId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setOfferActive(data.is_active);
+      });
+  }, [offerId]);
 
   const loadRecipients = useCallback(async () => {
     try {
@@ -298,12 +307,13 @@ export function OfferEditorAssignments({ offerId, adminUserId }: Props) {
 
   const executeAction = async (action: 'assign' | 'send') => {
     if (selectedUsers.length === 0) return;
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
     try {
       setAssigning(true);
       setSendProgress(0);
       const userIds = selectedUsers.map(u => u.id);
 
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setSendProgress(prev => prev !== null && prev < 80 ? prev + 15 : prev);
       }, 120);
 
@@ -319,7 +329,6 @@ export function OfferEditorAssignments({ offerId, adminUserId }: Props) {
         toast.success(`Oferta atribuida a ${selectedUsers.length} usuario${selectedUsers.length > 1 ? 's' : ''}`);
       }
 
-      clearInterval(progressInterval);
       setTimeout(() => setSendProgress(null), 600);
       setSelectedUsers([]);
       setNotes('');
@@ -331,6 +340,7 @@ export function OfferEditorAssignments({ offerId, adminUserId }: Props) {
       toast.error('Erro ao processar operacao');
       setSendProgress(null);
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setAssigning(false);
     }
   };
@@ -460,6 +470,19 @@ export function OfferEditorAssignments({ offerId, adminUserId }: Props) {
 
   return (
     <div className="space-y-6">
+      {offerActive === false && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Oferta inativa</p>
+            <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
+              Esta oferta esta desativada. Usuarios atribuidos via "Atribuir" nao verao a oferta ate que ela seja ativada.
+              O botao "Enviar agora" exibe a oferta imediatamente independente do status.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Search & Selection */}
       <div className="rounded-xl border bg-card p-6 space-y-4">
         <div>

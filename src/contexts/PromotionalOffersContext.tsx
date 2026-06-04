@@ -213,7 +213,7 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
     };
   }, [user, loadEligibleOffers, currentOffer]);
 
-  // Broadcast channel: admin "send now" push — reload then immediately show the offer
+  // Broadcast channel: admin "send now" push — fetch the specific offer and show immediately
   useEffect(() => {
     if (!user || user.role === 'admin') return;
 
@@ -221,10 +221,33 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
       .channel(OFFER_PUSH_CHANNEL)
       .on('broadcast', { event: 'new_offer' }, async ({ payload }) => {
         const data = payload as OfferPushPayload;
-        if (!data?.user_ids?.includes(user.id)) return;
-        loadedRef.current = false;
-        await loadEligibleOffers();
-        // Small delay so queue state settles, then trigger immediate display
+        if (!data?.user_ids?.includes(user.id) || !data?.offer_id) return;
+
+        // Fetch the pushed offer directly by ID (bypasses is_active filter)
+        const { data: offer } = await supabase
+          .from('promotional_offers')
+          .select('*')
+          .eq('id', data.offer_id)
+          .maybeSingle();
+
+        if (!offer) return;
+
+        const pushedItem: OfferQueueItem = { offer, config: null, source: 'manual' };
+
+        // Fetch display config if available
+        const { data: configs } = await supabase
+          .from('offer_display_config')
+          .select('*')
+          .eq('offer_id', offer.id)
+          .maybeSingle();
+
+        if (configs) pushedItem.config = configs;
+
+        setOfferQueue(prev => {
+          const without = prev.filter(item => item.offer.id !== offer.id);
+          return [pushedItem, ...without];
+        });
+
         setTimeout(() => {
           setForceShowPushed(true);
         }, 200);
@@ -234,7 +257,7 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, loadEligibleOffers]);
+  }, [user]);
 
   const triggerOfferCheck = useCallback((trigger: OfferTrigger) => {
     if (currentOffer) return;
