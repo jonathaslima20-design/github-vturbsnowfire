@@ -57,6 +57,9 @@ export interface User {
   max_images_per_product?: number;
   last_login_at?: string;
   login_count?: number;
+  onboarding_completed_steps?: string[];
+  onboarding_dismissed?: boolean;
+  onboarding_storefront_viewed?: boolean;
 }
 
 export type ActivityAction =

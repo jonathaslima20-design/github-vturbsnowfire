@@ -13,6 +13,7 @@ import { TopProductsList } from '@/components/dashboard/TopProductsList';
 import { SalesFunnel } from '@/components/dashboard/SalesFunnel';
 import { RecentActivityFeed } from '@/components/dashboard/RecentActivityFeed';
 import { DashboardPeriodFilter, PeriodOption } from '@/components/dashboard/DashboardPeriodFilter';
+import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -91,6 +92,8 @@ export default function DashboardPage() {
         </div>
         <DashboardPeriodFilter value={periodDays} onChange={handlePeriodChange} />
       </div>
+
+      <OnboardingChecklist />
 
       {error && (
         <Alert variant="destructive">
