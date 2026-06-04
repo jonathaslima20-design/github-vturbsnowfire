@@ -98,6 +98,7 @@ export function OnboardingChecklist() {
 
       case 'upgrade':
         openModal(false);
+        await completeStep('upgrade');
         break;
     }
   };
@@ -117,8 +118,8 @@ export function OnboardingChecklist() {
         {/* Header */}
         <div className="px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <Rocket className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Rocket className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold truncate">Primeiros Passos</h3>
@@ -161,9 +162,9 @@ export function OnboardingChecklist() {
               className="overflow-hidden"
             >
               {allPracticalStepsDone && (
-                <div className="mx-4 sm:mx-5 mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 text-center">
-                    Sua loja está pronta! Agora desbloqueie o plano completo.
+                <div className="mx-4 sm:mx-5 mb-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <p className="text-sm font-medium text-primary text-center">
+                    Parabéns! Você concluiu todos os passos.
                   </p>
                 </div>
               )}
@@ -189,7 +190,7 @@ export function OnboardingChecklist() {
                       <div
                         className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center transition-colors ${
                           step.completed
-                            ? 'bg-emerald-500 text-white'
+                            ? 'bg-primary text-primary-foreground'
                             : 'border-2 border-muted-foreground/30'
                         }`}
                       >
@@ -218,18 +219,14 @@ export function OnboardingChecklist() {
 
                       {/* Action button */}
                       {step.completed ? (
-                        <span className="flex-shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        <span className="flex-shrink-0 text-xs font-medium text-primary whitespace-nowrap">
                           Concluído
                         </span>
                       ) : (
                         <Button
                           variant={step.id === 'upgrade' ? 'default' : 'outline'}
                           size="sm"
-                          className={`flex-shrink-0 text-xs h-8 ${
-                            step.id === 'upgrade'
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              : ''
-                          }`}
+                          className="flex-shrink-0 text-xs h-8"
                           onClick={() => handleStepAction(step.id)}
                         >
                           <Icon className="h-3.5 w-3.5 mr-1.5" />
@@ -258,7 +255,7 @@ function ConfettiOverlay() {
     delay: Math.random() * 0.5,
     duration: 1.5 + Math.random() * 2,
     size: 6 + Math.random() * 6,
-    color: ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'][
+    color: ['#0ea5e9', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899'][
       Math.floor(Math.random() * 6)
     ],
   }));

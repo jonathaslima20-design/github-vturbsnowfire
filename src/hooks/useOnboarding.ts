@@ -73,8 +73,7 @@ export function useOnboarding(): OnboardingState {
 
     const shareDone = completedSteps.includes('share');
 
-    const upgradeDone = completedSteps.includes('upgrade') ||
-      user?.plan_status === 'active';
+    const upgradeDone = completedSteps.includes('upgrade');
 
     return [
       {
@@ -136,19 +135,21 @@ export function useOnboarding(): OnboardingState {
   const completedCount = steps.filter(s => s.completed).length;
   const totalSteps = steps.length;
   const progressPercent = Math.round((completedCount / totalSteps) * 100);
-  const allPracticalStepsDone = steps.slice(0, 4).every(s => s.completed);
+  const allPracticalStepsDone = steps.every(s => s.completed);
+
+  const allStepsDone = steps.every(s => s.completed);
 
   const isVisible = useMemo(() => {
     if (!user) return false;
     if (user.role !== 'corretor') return false;
-    if (user.plan_status === 'active') return false;
+    if (allStepsDone) return false;
 
     const daysSinceCreation = (Date.now() - new Date(user.created_at).getTime());
     const isNew = daysSinceCreation <= THREE_DAYS_MS;
     const hasZeroProducts = productCount === 0;
 
     return isNew || hasZeroProducts;
-  }, [user, productCount]);
+  }, [user, productCount, allStepsDone]);
 
   const isDismissed = user?.onboarding_dismissed ?? false;
 
