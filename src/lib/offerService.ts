@@ -99,6 +99,10 @@ export async function fetchOfferById(id: string): Promise<OfferWithConfig | null
     supabase.from('offer_impressions').select('action').eq('offer_id', id),
   ]);
 
+  if (rulesResult.error) throw rulesResult.error;
+  if (configResult.error) throw configResult.error;
+  if (impressionsResult.error) throw impressionsResult.error;
+
   const assignmentCountResult = await supabase
     .from('offer_user_assignments')
     .select('id', { count: 'exact', head: true })

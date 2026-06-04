@@ -59,6 +59,7 @@ export default function OfferAnalyticsPage() {
   const [analytics, setAnalytics] = useState<OfferAnalytics | null>(null);
   const [recipients, setRecipients] = useState<OfferRecipientSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timelineUser, setTimelineUser] = useState<OfferRecipientSummary | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<OfferTimelineEvent[]>([]);
@@ -77,6 +78,8 @@ export default function OfferAnalyticsPage() {
         setAnalytics(analyticsData);
         setRecipients(recipientData);
       } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+        setLoadError(msg);
         toast.error('Erro ao carregar analytics');
         console.error(err);
       } finally {
@@ -112,10 +115,26 @@ export default function OfferAnalyticsPage() {
     );
   }
 
-  if (!offer || !analytics) {
+  if (loadError || !offer || !analytics) {
     return (
       <div className="container mx-auto p-6">
-        <p>Oferta nao encontrada</p>
+        <div className="flex items-center gap-3 mb-6">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/offers')}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <h1 className="text-xl font-bold">Analytics</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+          <p className="text-base font-medium">
+            {loadError ? 'Erro ao carregar analytics' : 'Oferta nao encontrada'}
+          </p>
+          {loadError && (
+            <p className="text-sm text-destructive max-w-md text-center">{loadError}</p>
+          )}
+          <Button variant="outline" onClick={() => navigate('/admin/offers')}>
+            Voltar para ofertas
+          </Button>
+        </div>
       </div>
     );
   }
