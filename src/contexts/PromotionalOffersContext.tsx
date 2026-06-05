@@ -59,7 +59,8 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
   const sessionStartRef = useRef<number>(Date.now());
   const lastDisplayTimeRef = useRef<Map<string, number>>(new Map());
   const displayCountRef = useRef<Map<string, number>>(new Map());
-  const loadedRef = useRef(false);
+  const lastLoadedFingerprintRef = useRef<string | null>(null);
+  const prevPathnameRef = useRef<string>(location.pathname);
 
   const loadEligibleOffers = useCallback(async () => {
     if (!user || user.role === 'admin') return;
@@ -165,11 +166,13 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
     if (!user || user.role === 'admin') {
       setOfferQueue([]);
       setCurrentOffer(null);
-      loadedRef.current = false;
+      lastLoadedFingerprintRef.current = null;
       return;
     }
-    if (loadedRef.current) return;
-    loadedRef.current = true;
+
+    const fingerprint = `${user.id}:${user.plan_status || 'free'}`;
+    if (lastLoadedFingerprintRef.current === fingerprint) return;
+    lastLoadedFingerprintRef.current = fingerprint;
     loadEligibleOffers();
   }, [user, loadEligibleOffers]);
 
@@ -304,6 +307,21 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
       }
     }
   }, [currentOffer, offerQueue, user, location.pathname]);
+
+  // Re-load offers when navigating from a blocked path (register/login) to dashboard
+  useEffect(() => {
+    const prevBlocked = isPathBlocked(prevPathnameRef.current);
+    const currentBlocked = isPathBlocked(location.pathname);
+    prevPathnameRef.current = location.pathname;
+
+    if (prevBlocked && !currentBlocked && user && user.role !== 'admin') {
+      const fingerprint = `${user.id}:${user.plan_status || 'free'}`;
+      lastLoadedFingerprintRef.current = null;
+      loadEligibleOffers().then(() => {
+        lastLoadedFingerprintRef.current = fingerprint;
+      });
+    }
+  }, [location.pathname, user, loadEligibleOffers]);
 
   // Auto-trigger when arriving on a non-blocked page
   useEffect(() => {
