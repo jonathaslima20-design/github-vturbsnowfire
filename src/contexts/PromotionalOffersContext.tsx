@@ -61,6 +61,17 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
   const displayCountRef = useRef<Map<string, number>>(new Map());
   const lastLoadedFingerprintRef = useRef<string | null>(null);
   const prevPathnameRef = useRef<string>(location.pathname);
+  const delayedTriggerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevUserIdRef = useRef<string | null>(null);
+
+  // Reset session timer when user authenticates (login/registration)
+  useEffect(() => {
+    const currentUserId = user?.id || null;
+    if (currentUserId && currentUserId !== prevUserIdRef.current) {
+      sessionStartRef.current = Date.now();
+    }
+    prevUserIdRef.current = currentUserId;
+  }, [user?.id]);
 
   const loadEligibleOffers = useCallback(async () => {
     if (!user || user.role === 'admin') return;
@@ -323,16 +334,44 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
     }
   }, [location.pathname, user, loadEligibleOffers]);
 
-  // Auto-trigger when arriving on a non-blocked page
+  // Auto-trigger when arriving on a non-blocked page, with delayed retry for time-gated offers
   useEffect(() => {
     if (offerQueue.length === 0 || currentOffer) return;
     if (isPathBlocked(location.pathname)) return;
 
     const timer = setTimeout(() => {
       triggerOfferCheck('ao_entrar');
+
+      // If no offer was shown, check if any are waiting on exibir_apos_minutos_navegando
+      const now = Date.now();
+      const sessionMinutes = (now - sessionStartRef.current) / (1000 * 60);
+
+      let minWaitMs = Infinity;
+      for (const item of offerQueue) {
+        const config = item.config;
+        if (!config || config.gatilho_acao !== 'ao_entrar') continue;
+        if (config.exibir_apos_minutos_navegando > 0 && sessionMinutes < config.exibir_apos_minutos_navegando) {
+          const remainingMs = (config.exibir_apos_minutos_navegando - sessionMinutes) * 60 * 1000;
+          if (remainingMs < minWaitMs) minWaitMs = remainingMs;
+        }
+      }
+
+      if (minWaitMs < Infinity && minWaitMs > 0) {
+        if (delayedTriggerRef.current) clearTimeout(delayedTriggerRef.current);
+        delayedTriggerRef.current = setTimeout(() => {
+          triggerOfferCheck('ao_entrar');
+          delayedTriggerRef.current = null;
+        }, minWaitMs + 100);
+      }
     }, 1500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (delayedTriggerRef.current) {
+        clearTimeout(delayedTriggerRef.current);
+        delayedTriggerRef.current = null;
+      }
+    };
   }, [offerQueue, currentOffer, triggerOfferCheck, location.pathname]);
 
   // Immediately show offer when admin sends a real-time push
