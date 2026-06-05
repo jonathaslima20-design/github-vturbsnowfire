@@ -458,12 +458,6 @@ function PaymentSuccess() {
   );
 }
 
-interface OfferDiscountPreview {
-  discount_type: 'percent' | 'fixed' | null;
-  discount_value: number;
-  offer_title: string;
-}
-
 export default function CheckoutPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -476,8 +470,6 @@ export default function CheckoutPage() {
   const [sdkError, setSdkError] = useState(false);
   const [offerContext, setOfferContext] = useState<OfferContext | null>(null);
   const [offerLoading, setOfferLoading] = useState(false);
-  const [availablePlans, setAvailablePlans] = useState<PlanInfo[]>([]);
-  const [offerPreview, setOfferPreview] = useState<OfferDiscountPreview | null>(null);
 
   const planId = searchParams.get('plan');
   const cycle = searchParams.get('cycle');
@@ -491,50 +483,11 @@ export default function CheckoutPage() {
       if (!resolvedPlanId && offerId) {
         const { data: offer } = await supabase
           .from('promotional_offers')
-          .select('plano_alvo_id, titulo, desconto_percentual, desconto_valor_fixo')
+          .select('plano_alvo_id')
           .eq('id', offerId)
           .maybeSingle();
 
         resolvedPlanId = offer?.plano_alvo_id || null;
-
-        if (!resolvedPlanId && offer) {
-          const { data: plans } = await supabase
-            .from('subscription_plans')
-            .select('id, name, price, duration')
-            .eq('is_active', true)
-            .neq('duration', 'Free')
-            .order('price', { ascending: true });
-
-          if (plans && plans.length > 0) {
-            setAvailablePlans(plans.map(p => ({
-              id: p.id,
-              name: p.name,
-              price: Number(p.price),
-              duration: p.duration,
-            })));
-
-            let discType: 'percent' | 'fixed' | null = null;
-            let discValue = 0;
-            if (offer.desconto_percentual && offer.desconto_percentual > 0) {
-              discType = 'percent';
-              discValue = offer.desconto_percentual;
-            } else if (offer.desconto_valor_fixo && offer.desconto_valor_fixo > 0) {
-              discType = 'fixed';
-              discValue = offer.desconto_valor_fixo;
-            }
-
-            setOfferPreview({
-              discount_type: discType,
-              discount_value: discValue,
-              offer_title: offer.titulo || 'Oferta Exclusiva',
-            });
-            setPlanLoading(false);
-            return;
-          }
-
-          navigate('/dashboard/settings');
-          return;
-        }
       }
 
       if (!resolvedPlanId) {
@@ -661,110 +614,7 @@ export default function CheckoutPage() {
     await refreshUser();
   }, [refreshUser, plan, user?.email]);
 
-  const handleSelectPlan = (selectedPlan: PlanInfo) => {
-    setPlan(selectedPlan);
-    setAvailablePlans([]);
-  };
-
-  if (planLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!plan && availablePlans.length > 0 && offerPreview) {
-    return (
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(-1)}
-            className="text-muted-foreground"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Voltar
-          </Button>
-
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300">
-              <Tag className="h-3.5 w-3.5" />
-              {offerPreview.discount_type === 'percent'
-                ? `${offerPreview.discount_value}% OFF`
-                : `${formatCurrencyI18n(offerPreview.discount_value)} OFF`}
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight">Escolha seu plano</h1>
-            <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              Aproveite o desconto exclusivo em qualquer plano abaixo
-            </p>
-          </div>
-
-          <div className={`grid grid-cols-1 gap-4 ${availablePlans.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
-            {availablePlans.map((p) => {
-              const { discount, finalPrice } = calculateDiscountedPrice(
-                p.price,
-                offerPreview.discount_type,
-                offerPreview.discount_value,
-                null
-              );
-              const isAnnual = p.duration === 'Anual';
-              return (
-                <Card
-                  key={p.id}
-                  className={cn(
-                    'relative overflow-hidden transition-all hover:shadow-lg cursor-pointer border-2',
-                    isAnnual ? 'border-primary ring-1 ring-primary/20' : 'border-border hover:border-primary/50'
-                  )}
-                  onClick={() => handleSelectPlan(p)}
-                >
-                  {isAnnual && (
-                    <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] uppercase tracking-wide font-semibold px-3 py-1 rounded-bl-lg">
-                      Melhor valor
-                    </div>
-                  )}
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">{p.name}</CardTitle>
-                    <CardDescription className="text-xs">
-                      {p.duration === 'Trimestral' && 'Flexibilidade para comecar'}
-                      {p.duration === 'Semestral' && 'Mais escolhido'}
-                      {p.duration === 'Anual' && 'Maior economia'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground line-through">
-                        De {formatCurrencyI18n(p.price)}
-                      </p>
-                      <p className="text-3xl font-bold text-emerald-600">
-                        {formatCurrencyI18n(finalPrice)}
-                      </p>
-                      {discount > 0 && (
-                        <p className="text-xs text-emerald-600 font-medium mt-1">
-                          Economia de {formatCurrencyI18n(discount)}
-                        </p>
-                      )}
-                    </div>
-                    <Button className="w-full" variant={isAnnual ? 'default' : 'outline'}>
-                      Escolher este plano
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="h-4 w-4" />
-            <span>Pagamento seguro processado por Mercado Pago</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!plan) {
+  if (planLoading || !plan) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

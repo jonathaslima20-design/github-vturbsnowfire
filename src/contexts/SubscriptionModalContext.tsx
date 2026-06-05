@@ -1,11 +1,20 @@
 import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import type { LimitReason } from '@/types';
 
+export interface OfferDiscountInfo {
+  offer_id: string;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  offer_title: string;
+}
+
 interface SubscriptionModalContextType {
   isOpen: boolean;
   isForced: boolean;
   limitReason: LimitReason;
+  offerDiscount: OfferDiscountInfo | null;
   openModal: (forced?: boolean, reason?: LimitReason) => void;
+  openModalWithOffer: (offer: OfferDiscountInfo) => void;
   closeModal: () => void;
   forceClose: () => void;
   setForced: (forced: boolean) => void;
@@ -17,8 +26,8 @@ export function SubscriptionModalProvider({ children }: { children: ReactNode })
   const [isOpen, setIsOpen] = useState(false);
   const [isForced, setIsForced] = useState(false);
   const [limitReason, setLimitReason] = useState<LimitReason>(null);
+  const [offerDiscount, setOfferDiscount] = useState<OfferDiscountInfo | null>(null);
 
-  // Use ref so callbacks never go stale and don't trigger re-renders in dependents
   const isForcedRef = useRef(false);
 
   const openModal = useCallback((forced = false, reason: LimitReason = null) => {
@@ -28,18 +37,25 @@ export function SubscriptionModalProvider({ children }: { children: ReactNode })
     setLimitReason(reason);
   }, []);
 
-  // closeModal closes the dialog visually; forced state is preserved so SubscriptionBlocker can re-open
-  const closeModal = useCallback(() => {
-    setIsOpen(false);
+  const openModalWithOffer = useCallback((offer: OfferDiscountInfo) => {
+    setOfferDiscount(offer);
+    setIsOpen(true);
+    setIsForced(false);
     setLimitReason(null);
   }, []);
 
-  // forceClose bypasses the isForced guard — for programmatic use only
+  const closeModal = useCallback(() => {
+    setIsOpen(false);
+    setLimitReason(null);
+    setOfferDiscount(null);
+  }, []);
+
   const forceClose = useCallback(() => {
     isForcedRef.current = false;
     setIsForced(false);
     setIsOpen(false);
     setLimitReason(null);
+    setOfferDiscount(null);
   }, []);
 
   const setForcedState = useCallback((forced: boolean) => {
@@ -51,7 +67,9 @@ export function SubscriptionModalProvider({ children }: { children: ReactNode })
     isOpen,
     isForced,
     limitReason,
+    offerDiscount,
     openModal,
+    openModalWithOffer,
     closeModal,
     forceClose,
     setForced: setForcedState,

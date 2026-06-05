@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { useSubscriptionModal } from './SubscriptionModalContext';
 import { supabase } from '../lib/supabase';
 import type { PromotionalOffer, OfferDisplayConfig, OfferTrigger } from '../types/offers';
 import {
@@ -50,6 +51,7 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { openModalWithOffer } = useSubscriptionModal();
   const [offerQueue, setOfferQueue] = useState<OfferQueueItem[]>([]);
   const [currentOffer, setCurrentOffer] = useState<OfferQueueItem | null>(null);
   const [forceShowPushed, setForceShowPushed] = useState(false);
@@ -345,10 +347,28 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
       !!offer.cupom_id;
 
     if (hasDiscount || offer.plano_alvo_id) {
-      const params = new URLSearchParams();
-      params.set('offer_id', offer.id);
-      if (offer.plano_alvo_id) params.set('plan', offer.plano_alvo_id);
-      navigate(`/dashboard/checkout?${params.toString()}`);
+      if (offer.plano_alvo_id) {
+        const params = new URLSearchParams();
+        params.set('offer_id', offer.id);
+        params.set('plan', offer.plano_alvo_id);
+        navigate(`/dashboard/checkout?${params.toString()}`);
+      } else {
+        let discType: 'percent' | 'fixed' = 'percent';
+        let discValue = 0;
+        if (offer.desconto_percentual && offer.desconto_percentual > 0) {
+          discType = 'percent';
+          discValue = offer.desconto_percentual;
+        } else if (offer.desconto_valor_fixo && offer.desconto_valor_fixo > 0) {
+          discType = 'fixed';
+          discValue = offer.desconto_valor_fixo;
+        }
+        openModalWithOffer({
+          offer_id: offer.id,
+          discount_type: discType,
+          discount_value: discValue,
+          offer_title: offer.titulo || 'Oferta Exclusiva',
+        });
+      }
       return;
     }
 
@@ -359,7 +379,7 @@ export function PromotionalOffersProvider({ children }: { children: React.ReactN
         navigate(offer.url_destino);
       }
     }
-  }, [currentOffer, user, location.pathname, navigate]);
+  }, [currentOffer, user, location.pathname, navigate, openModalWithOffer]);
 
   return (
     <PromotionalOffersContext.Provider value={{

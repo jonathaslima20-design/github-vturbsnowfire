@@ -7,7 +7,7 @@ import SubscriptionModal from '@/components/subscription/SubscriptionModal';
 export default function SubscriptionBlocker() {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const { isOpen, isForced, limitReason, setForced, openModal, closeModal, forceClose } = useSubscriptionModal();
+  const { isOpen, isForced, limitReason, offerDiscount, setForced, openModal, closeModal, forceClose } = useSubscriptionModal();
 
   const isOnCheckout = location.pathname === '/dashboard/checkout';
 
@@ -57,6 +57,7 @@ export default function SubscriptionBlocker() {
       isForced={isForced}
       limitReason={limitReason}
       planStatus={user?.plan_status}
+      offerDiscount={offerDiscount}
     />
   );
 }

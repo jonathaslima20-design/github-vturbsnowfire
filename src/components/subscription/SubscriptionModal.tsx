@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CreditCard, ArrowRight, LogOut, Package, FolderOpen, CircleArrowUp as ArrowUpCircle, Lock, TriangleAlert as AlertTriangle, Ban } from 'lucide-react';
+import { Check, CreditCard, ArrowRight, LogOut, Package, FolderOpen, CircleArrowUp as ArrowUpCircle, Lock, TriangleAlert as AlertTriangle, Ban, Tag } from 'lucide-react';
 import BannerClients from '@/components/subscription/BannerClients';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,8 +16,10 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { formatCurrencyI18n } from '@/lib/i18n';
+import { calculateDiscountedPrice } from '@/lib/offerService';
 import { useAuth } from '@/contexts/AuthContext';
 import type { SubscriptionPlan, LimitReason, PlanStatus } from '@/types';
+import type { OfferDiscountInfo } from '@/contexts/SubscriptionModalContext';
 import { FREE_PLAN_PRODUCT_LIMIT, FREE_PLAN_CATEGORY_LIMIT } from '@/hooks/usePlanLimits';
 
 interface SubscriptionModalProps {
@@ -26,9 +28,10 @@ interface SubscriptionModalProps {
   isForced?: boolean;
   limitReason?: LimitReason;
   planStatus?: PlanStatus;
+  offerDiscount?: OfferDiscountInfo | null;
 }
 
-export default function SubscriptionModal({ open, onOpenChange, isForced = false, limitReason, planStatus }: SubscriptionModalProps) {
+export default function SubscriptionModal({ open, onOpenChange, isForced = false, limitReason, planStatus, offerDiscount }: SubscriptionModalProps) {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const { user, signOut } = useAuth();
@@ -124,6 +127,7 @@ export default function SubscriptionModal({ open, onOpenChange, isForced = false
   const isSuspended = planStatus === 'suspended';
 
   const getModalTitle = () => {
+    if (offerDiscount) return 'Oferta Exclusiva';
     if (isSuspended) return 'Conta Suspensa';
     if (isExpired) return 'Plano Expirado';
     if (isUserActive) return 'Gerenciar Plano';
@@ -132,6 +136,12 @@ export default function SubscriptionModal({ open, onOpenChange, isForced = false
   };
 
   const getModalDescription = () => {
+    if (offerDiscount) {
+      const discLabel = offerDiscount.discount_type === 'percent'
+        ? `${offerDiscount.discount_value}% de desconto`
+        : `${formatCurrencyI18n(offerDiscount.discount_value, user?.currency || 'BRL', user?.language || 'pt-BR')} de desconto`;
+      return `${offerDiscount.offer_title} — ${discLabel} em qualquer plano. Aproveite!`;
+    }
     if (isSuspended) return 'Sua conta foi suspensa pelo administrador. Entre em contato com o suporte para mais informações.';
     if (isExpired) return 'Seu plano venceu. Renove agora para recuperar o acesso completo à sua vitrine e ao painel.';
     if (isUserActive) return 'Seu plano está ativo. Você tem acesso completo à plataforma VitrineTurbo.';
@@ -170,6 +180,17 @@ export default function SubscriptionModal({ open, onOpenChange, isForced = false
             {getModalDescription()}
           </DialogDescription>
         </DialogHeader>
+
+        {offerDiscount && (
+          <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800">
+            <Tag className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              {offerDiscount.discount_type === 'percent'
+                ? `${offerDiscount.discount_value}% OFF em todos os planos`
+                : `${formatCurrencyI18n(offerDiscount.discount_value, user?.currency || 'BRL', user?.language || 'pt-BR')} OFF em todos os planos`}
+            </span>
+          </div>
+        )}
 
         {limitMessage && (
           <Alert className="bg-amber-50 border-amber-200">
@@ -308,6 +329,12 @@ export default function SubscriptionModal({ open, onOpenChange, isForced = false
                   const planFeatures = featured
                     ? [...commonPaidFeatures, ...annualExclusiveFeatures]
                     : commonPaidFeatures;
+
+                  const hasOfferDiscount = offerDiscount && offerDiscount.discount_value > 0;
+                  const discounted = hasOfferDiscount
+                    ? calculateDiscountedPrice(plan.price, offerDiscount.discount_type, offerDiscount.discount_value, null)
+                    : null;
+
                   return (
                     <div
                       key={plan.id}
@@ -328,9 +355,25 @@ export default function SubscriptionModal({ open, onOpenChange, isForced = false
                         </span>
                       </div>
                       <div className="mt-6">
-                        <span className={`text-4xl font-bold tracking-tight ${featured ? 'text-white' : 'text-zinc-900'}`}>
-                          {formatCurrencyI18n(plan.price, user?.currency || 'BRL', user?.language || 'pt-BR')}
-                        </span>
+                        {discounted && discounted.discount > 0 ? (
+                          <>
+                            <span className={`text-lg line-through ${featured ? 'text-white/50' : 'text-zinc-400'}`}>
+                              {formatCurrencyI18n(plan.price, user?.currency || 'BRL', user?.language || 'pt-BR')}
+                            </span>
+                            <div className="flex items-baseline gap-2 mt-1">
+                              <span className={`text-4xl font-bold tracking-tight ${featured ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                {formatCurrencyI18n(discounted.finalPrice, user?.currency || 'BRL', user?.language || 'pt-BR')}
+                              </span>
+                            </div>
+                            <p className={`text-xs mt-1 font-medium ${featured ? 'text-emerald-400/80' : 'text-emerald-600'}`}>
+                              Economia de {formatCurrencyI18n(discounted.discount, user?.currency || 'BRL', user?.language || 'pt-BR')}
+                            </p>
+                          </>
+                        ) : (
+                          <span className={`text-4xl font-bold tracking-tight ${featured ? 'text-white' : 'text-zinc-900'}`}>
+                            {formatCurrencyI18n(plan.price, user?.currency || 'BRL', user?.language || 'pt-BR')}
+                          </span>
+                        )}
                       </div>
                       <ul className="mt-6 space-y-3 flex-1">
                         {planFeatures.map((feature, index) => (
@@ -355,7 +398,9 @@ export default function SubscriptionModal({ open, onOpenChange, isForced = false
                         onClick={() => {
                           trackInitiateCheckout(plan.name, plan.price);
                           onOpenChange(false);
-                          navigate(`/dashboard/checkout?plan=${plan.id}&cycle=${plan.duration}`);
+                          const params = new URLSearchParams({ plan: plan.id, cycle: plan.duration });
+                          if (offerDiscount) params.set('offer_id', offerDiscount.offer_id);
+                          navigate(`/dashboard/checkout?${params.toString()}`);
                         }}
                       >
                         <CreditCard size={14} />
