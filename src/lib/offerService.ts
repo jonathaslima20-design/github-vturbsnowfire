@@ -355,7 +355,7 @@ export async function updateAssignmentStatus(offerId: string, userId: string, st
 export async function fetchOfferRecipients(offerId: string): Promise<OfferRecipientSummary[]> {
   const { data: assignments, error: assignErr } = await supabase
     .from('offer_user_assignments')
-    .select('id, user_id, status, assigned_at, status_updated_at, converted_at, user:users(name, email, avatar_url)')
+    .select('id, user_id, status, assigned_at, status_updated_at, converted_at, user:users!fk_offer_assignments_user_id(name, email, avatar_url)')
     .eq('offer_id', offerId)
     .order('assigned_at', { ascending: false });
 
